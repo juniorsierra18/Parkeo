@@ -9,21 +9,17 @@ import { Client, User } from '../types';
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { 
-    isAdmin, 
-    isRootAdmin, 
-    maxSpaces, 
-    setMaxSpaces, 
-    hourlyRate, 
-    setHourlyRate,
-    occupiedSpaces,
-    availableSpaces
-  } = useParking();
+  const { isAdmin, isRootAdmin, occupiedSpaces } = useParking();
+
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [filter, setFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
   const [searchCedula, setSearchCedula] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+
+  // Valores para Espacios Totales y Tarifa por Hora desde la API
+  const [maxSpaces, setMaxSpaces] = useState<number | null>(null);
+  const [hourlyRate, setHourlyRate] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -31,6 +27,7 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     fetchData();
+    fetchConfig();
   }, [isAdmin, navigate]);
 
   const fetchData = async () => {
@@ -45,6 +42,25 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching data:', error);
+    }
+  };
+
+  const fetchConfig = async () => {
+    try {
+      const configResponse = await api.getConfigById(1); // Usamos el ID deseado para obtener la configuración
+      setMaxSpaces(configResponse.data.slot);
+      setHourlyRate(configResponse.data.precio);
+    } catch (error) {
+      console.error('Error fetching config data:', error);
+    }
+  };
+
+  const updateConfig = async () => {
+    try {
+      await api.updateConfig(1, { slot: maxSpaces, precio: hourlyRate });
+      fetchConfig();
+    } catch (error) {
+      console.error('Error updating config data:', error);
     }
   };
 
@@ -66,6 +82,9 @@ export const AdminDashboard: React.FC = () => {
     .filter((client) => 
       searchCedula ? client.cedula.includes(searchCedula) : true
     );
+
+  // Cálculo de espacios disponibles basado en espacios máximos y ocupados
+  const availableSpaces = maxSpaces !== null ? maxSpaces - occupiedSpaces : 0;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -108,7 +127,7 @@ export const AdminDashboard: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={maxSpaces}
+                  value={maxSpaces || ''}
                   onChange={(e) => setMaxSpaces(Number(e.target.value))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 />
@@ -119,11 +138,14 @@ export const AdminDashboard: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  value={hourlyRate}
+                  value={hourlyRate || ''}
                   onChange={(e) => setHourlyRate(Number(e.target.value))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 />
               </div>
+              <button onClick={updateConfig} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md">
+                Guardar Cambios
+              </button>
             </div>
           </div>
         )}
@@ -160,13 +182,6 @@ export const AdminDashboard: React.FC = () => {
                   Clientes Registrados
                 </h2>
                 <div className="mt-4 md:mt-0 space-y-2 md:space-y-0 md:space-x-2">
-                  <input
-                    type="text"
-                    placeholder="Buscar por cédula"
-                    value={searchCedula}
-                    onChange={(e) => setSearchCedula(e.target.value)}
-                    className="w-full md:w-auto px-3 py-2 border border-gray-300 rounded-md"
-                  />
                   <select
                     value={filter}
                     onChange={(e) => setFilter(e.target.value as 'all' | 'paid' | 'unpaid')}

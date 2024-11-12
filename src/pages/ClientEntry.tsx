@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { api } from '../api';
@@ -6,11 +6,44 @@ import { useParking } from '../context/ParkingContext';
 
 export const ClientEntry: React.FC = () => {
   const navigate = useNavigate();
-  const { hourlyRate, availableSpaces } = useParking();
+
   const [cedula, setCedula] = useState('');
   const [matricula, setMatricula] = useState('');
   const [hours, setHours] = useState<'1' | '2' | '4' | 'flexible'>('1');
   const [error, setError] = useState('');
+
+  // Estados para la configuración del parqueadero
+  const [maxSpaces, setMaxSpaces] = useState<number | null>(null);
+  const [clientsCount, setClientsCount] = useState<number>(0);
+  const [hourlyRate, setHourlyRate] = useState<number | null>(null);
+
+  // Calculamos los espacios disponibles
+  const availableSpaces = maxSpaces !== null ? maxSpaces - clientsCount : 0;
+
+  useEffect(() => {
+    // Obtener la configuración y los clientes registrados
+    fetchConfig();
+    fetchClients();
+  }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const configResponse = await api.getConfigById(1); // Usamos el ID de configuración deseado
+      setMaxSpaces(configResponse.data.slot); // Establecemos los espacios totales
+      setHourlyRate(configResponse.data.precio); // Establecemos el precio de la hora
+    } catch (error) {
+      console.error('Error fetching config data:', error);
+    }
+  };
+
+  const fetchClients = async () => {
+    try {
+      const clientsResponse = await api.getClients();
+      setClientsCount(clientsResponse.data.length); // Contamos la cantidad de clientes registrados
+    } catch (error) {
+      console.error('Error fetching clients data:', error);
+    }
+  };
 
   const validateMatricula = (value: string) => {
     const regex = /^[a-zA-Z]{3}\d{3}$/;
@@ -26,14 +59,20 @@ export const ClientEntry: React.FC = () => {
       return;
     }
 
+    if (hourlyRate === null) {
+      setError('Error al obtener la tarifa');
+      return;
+    }
+
     try {
       if (availableSpaces <= 0) {
         setError('No hay espacios disponibles');
         return;
       }
 
+      // Calcular el precio según las horas seleccionadas
       const precio = hours === 'flexible' ? hourlyRate : Number(hours) * hourlyRate;
-      
+
       await api.createClient({
         cedula,
         matricula: matricula.toUpperCase(),
@@ -74,7 +113,7 @@ export const ClientEntry: React.FC = () => {
                 {availableSpaces} espacios
               </p>
               <p className="text-sm text-gray-500">
-                Tarifa: ${hourlyRate}/hora
+                Tarifa: ${hourlyRate || 'Cargando...'} /hora
               </p>
             </div>
           </div>
@@ -116,8 +155,8 @@ export const ClientEntry: React.FC = () => {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
               >
                 <option value="1">1 hora (${hourlyRate})</option>
-                <option value="2">2 horas (${hourlyRate * 2})</option>
-                <option value="4">4 horas (${hourlyRate * 4})</option>
+                <option value="2">2 horas (${hourlyRate ? hourlyRate * 2 : 'Cargando...'})</option>
+                <option value="4">4 horas (${hourlyRate ? hourlyRate * 4 : 'Cargando...'})</option>
                 <option value="flexible">Tiempo flexible</option>
               </select>
             </div>
